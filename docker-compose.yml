@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: school-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-school_management}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nuxt Application (Development)
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: school-app-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-school_management}
+    volumes:
+      # Mount source code for hot-reload
+      - ./app:/app/app
+      - ./server:/app/server
+      - ./public:/app/public
+      - ./nuxt.config.ts:/app/nuxt.config.ts
+      - ./tailwind.config.js:/app/tailwind.config.js
+      - ./tsconfig.json:/app/tsconfig.json
+      # Exclude node_modules from being mounted
+      - /app/node_modules
+      - /app/.nuxt
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - dev
+
+  # Nuxt Application (Production)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: school-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-school_management}
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - prod
+
+volumes:
+  postgres_data:
+    driver: local
